@@ -7,6 +7,7 @@ import pytest
 
 from engine.cards import N_CARDS, Suit, Zone, card_index
 from engine.core import ScopaEngine
+from engine.masks import is_consistent
 
 
 def _drain_deck(eng: ScopaEngine) -> None:
@@ -22,7 +23,7 @@ def test_deal_round_start_layout() -> None:
     assert eng.count(Zone.MANO_P1) == 3
     assert eng.count(Zone.MANO_P2) == 3
     assert eng.count(Zone.MAZZO) == N_CARDS - 10
-    assert eng.is_consistent()
+    assert is_consistent(eng)
 
 
 def test_deal_round_replenish_no_table() -> None:
@@ -91,7 +92,7 @@ def test_end_of_deal_sweep_to_last_capturer() -> None:
     eng.end_of_deal_sweep()
     assert eng.count(Zone.TAVOLO) == 0
     assert eng.count(Zone.PRESE_P2) == 2
-    assert eng.is_consistent()
+    assert is_consistent(eng)
 
 
 def test_move_bounds_checking() -> None:
@@ -105,5 +106,5 @@ def test_move_bounds_checking() -> None:
 def test_full_deal_conserves_cards() -> None:
     eng = ScopaEngine()
     eng.deal_round(np.random.default_rng(7))
-    assert eng.is_consistent()
+    assert is_consistent(eng)
     assert int(eng.state.sum()) == N_CARDS

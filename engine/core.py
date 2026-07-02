@@ -85,8 +85,8 @@ class ScopaEngine:
         """Indices of cards present in zone `z`."""
         # `row.nonzero()[0]` == `np.flatnonzero(row)` for a 1-D row but skips the
         # ravel/_wrapfunc Python layers flatnonzero adds — this is one of the
-        # hottest calls in the search, so the saved dispatch matters.
-        return self.state[z].nonzero()[0]
+        # hottest calls in the search (the `type: ignore` is comment-only).
+        return self.state[z].nonzero()[0]  # type: ignore[no-any-return]
 
     def count(self, z: Zone) -> int:
         """Number of cards in zone `z`."""
@@ -116,32 +116,34 @@ class ScopaEngine:
 
     # --- rules: captures and action masking -----------------------------
 
-    def captures_for(self, idx: int) -> list[npt.NDArray[np.intp]]:
-        """Legal capture options when playing card `idx`, given the table.
+    def legal_captures(self, idx: int) -> list[list[int]]:
+        """Legal capture sets for playing card `idx`, as plain-int lists.
 
-        Official rule: if a single table card of equal value exists, capturing
-        by combined sum is forbidden; only a single card may be taken.
-        Empty list = no capture (card is laid on the table).
+        The single source of the capture rule: an equal-value single on the table
+        forbids sum-captures (only that card may be taken); otherwise every subset
+        summing to the card's value qualifies. Returns `[[]]` when the card can
+        only be laid. Plain ints, no per-option NumPy arrays, so the search's
+        legal-move enumeration -- its hottest allocation site -- stays cheap.
         """
         v = CARD_VALUES[idx]
         table = self.cards_in(Zone.TAVOLO).tolist()
         singles = [c for c in table if CARD_VALUES[c] == v]
         if singles:
-            return [np.array([c], dtype=np.intp) for c in singles]
-        return [np.array(combo, dtype=np.intp) for combo in subsets_summing(tuple(table), v)]
+            return [[c] for c in singles]
+        subs = subsets_summing(tuple(table), v)
+        if subs:
+            return [list(combo) for combo in subs]
+        return [[]]
 
-    def legal_action_mask(self, player: int) -> CardArray:
-        """uint8 vector (40,): 1 for each card `player` may legally play (= hand)."""
-        mask: CardArray = self.state[HAND_ZONES[player]].copy()
-        return mask
+    def captures_for(self, idx: int) -> list[npt.NDArray[np.intp]]:
+        """NumPy view of `legal_captures` ([] = no capture / lay the card).
 
-    def capture_mask(self, player: int) -> CardArray:
-        """uint8 vector (40,): 1 for hand cards that trigger a capture."""
-        mask = np.zeros(N_CARDS, dtype=np.uint8)
-        for idx in self.cards_in(HAND_ZONES[player]):
-            if self.captures_for(int(idx)):
-                mask[idx] = 1
-        return mask
+        Thin wrapper over the rule primitive for callers/tests wanting arrays.
+        """
+        caps = self.legal_captures(idx)
+        if caps == [[]]:
+            return []
+        return [np.array(c, dtype=np.intp) for c in caps]
 
     # --- transactional move ---------------------------------------------
 
@@ -172,6 +174,33 @@ class ScopaEngine:
             self.move(card_idx, hand, PRESE_ZONES[player])
             for c in cap:
                 self.move(c, Zone.TAVOLO, PRESE_ZONES[player])
+            self.last_capturer = player
+            if self.count(Zone.TAVOLO) == 0 and not self._is_last_play():
+                self._add_scopa(player)
+                scopa = True
+        else:
+            self.move(card_idx, hand, Zone.TAVOLO)
+        self._set_turn(1 - player)
+        return scopa
+
+    def apply_legal_move(self, card_idx: int, cap: list[int]) -> bool:
+        """Apply an already-legal `(card, cap)` without re-deriving captures.
+
+        Behaviourally identical to `execute_move` for a legal move, but skips the
+        capture re-derivation, `sorted` canonicalization, and legality check --
+        pure overhead when the move comes straight from `legal_moves` (the search
+        hot path). Capture order is irrelevant (independent zone writes, XOR
+        hash), so state and hash match `execute_move` exactly. Callers MUST pass
+        a move produced from this state's legal options.
+        """
+        player = self.current_player
+        hand = HAND_ZONES[player]
+        scopa = False
+        if cap:
+            prese = PRESE_ZONES[player]
+            self.move(card_idx, hand, prese)
+            for c in cap:
+                self.move(c, Zone.TAVOLO, prese)
             self.last_capturer = player
             if self.count(Zone.TAVOLO) == 0 and not self._is_last_play():
                 self._add_scopa(player)
@@ -219,9 +248,3 @@ class ScopaEngine:
         dst = PRESE_ZONES[self.last_capturer]
         for c in [int(x) for x in self.cards_in(Zone.TAVOLO)]:
             self.move(c, Zone.TAVOLO, dst)
-
-    # --- invariants ------------------------------------------------------
-
-    def is_consistent(self) -> bool:
-        """Every card is in exactly one zone (column sum == 1)."""
-        return bool(np.all(self.state.sum(axis=0) == 1))

@@ -6,6 +6,7 @@ import numpy as np
 
 from engine.cards import N_CARDS, Suit, Zone, card_index
 from engine.core import ScopaEngine
+from engine.masks import capture_mask, is_consistent, legal_action_mask
 
 
 def _place(eng: ScopaEngine, suit: Suit, value: int, dst: Zone) -> int:
@@ -20,7 +21,7 @@ def _place(eng: ScopaEngine, suit: Suit, value: int, dst: Zone) -> int:
 def test_init_all_cards_in_deck() -> None:
     eng = ScopaEngine()
     assert eng.count(Zone.MAZZO) == N_CARDS
-    assert eng.is_consistent()
+    assert is_consistent(eng)
     for z in (Zone.TAVOLO, Zone.MANO_P1, Zone.MANO_P2, Zone.PRESE_P1, Zone.PRESE_P2):
         assert eng.count(z) == 0
 
@@ -46,7 +47,7 @@ def test_deal_preserves_consistency_and_counts() -> None:
     assert eng.count(Zone.MANO_P2) == 3
     assert eng.count(Zone.TAVOLO) == 4
     assert eng.count(Zone.MAZZO) == N_CARDS - 10
-    assert eng.is_consistent()
+    assert is_consistent(eng)
 
 
 def test_move_rejects_absent_card() -> None:
@@ -123,7 +124,7 @@ def test_action_mask_equals_hand() -> None:
     hand = [card_index(Suit.DENARI, v) for v in (1, 7, 10)]
     for idx in hand:
         eng.move(idx, Zone.MAZZO, Zone.MANO_P1)
-    mask = eng.legal_action_mask(0)
+    mask = legal_action_mask(eng, 0)
     assert mask.dtype == np.uint8
     assert int(mask.sum()) == 3
     assert all(mask[i] == 1 for i in hand)
@@ -136,6 +137,41 @@ def test_capture_mask_flags_only_capturing_cards() -> None:
     miss = card_index(Suit.SPADE, 2)
     eng.move(take, Zone.MAZZO, Zone.MANO_P1)
     eng.move(miss, Zone.MAZZO, Zone.MANO_P1)
-    mask = eng.capture_mask(0)
+    mask = capture_mask(eng, 0)
     assert mask[take] == 1
     assert mask[miss] == 0
+
+
+# --- trusted fast-path equivalence ---------------------------------------
+
+
+def test_apply_legal_move_matches_execute_move() -> None:
+    """`apply_legal_move` must reproduce `execute_move` state/hash/scopa exactly.
+
+    Fuzz across many random self-play deals: for every legal move, apply it via
+    both paths on independent clones and assert byte-identical state, hash,
+    scalars, scopa counts, and the returned Scopa flag.
+    """
+    from search.alphabeta import legal_moves
+
+    rng = np.random.default_rng(20260702)
+    for _ in range(200):
+        eng = ScopaEngine()
+        eng.deal_round(rng)
+        while not eng.is_game_over():
+            if eng.count(Zone.MANO_P1) == 0 and eng.count(Zone.MANO_P2) == 0:
+                eng.deal_round(rng)
+                continue
+            player = eng.current_player
+            moves = legal_moves(eng, player)
+            card, cap = moves[int(rng.integers(len(moves)))]
+            a, b = eng.clone(), eng.clone()
+            scopa_ref = a.execute_move(card, list(cap))
+            scopa_fast = b.apply_legal_move(card, list(cap))
+            assert scopa_fast == scopa_ref
+            assert np.array_equal(a.state, b.state)
+            assert a.zhash == b.zhash
+            assert a.current_player == b.current_player
+            assert a.last_capturer == b.last_capturer
+            assert np.array_equal(a.scopa_counts, b.scopa_counts)
+            eng.apply_legal_move(card, list(cap))

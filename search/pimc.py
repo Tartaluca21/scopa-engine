@@ -60,7 +60,7 @@ def pimc_decide(
         world = determinize(engine, player, rng, weights)
         for i, (card, cap) in enumerate(moves):
             child = world.clone()
-            child.execute_move(card, cap)
+            child.apply_legal_move(card, cap)
             # child is the opponent's turn: negate to score from `player`.
             value = -alphabeta(child, cfg.search.max_depth, -math.inf, math.inf, tt, cfg.search)
             totals[i] += value

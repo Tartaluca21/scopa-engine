@@ -6,6 +6,7 @@ import numpy as np
 
 from engine.cards import HAND_ZONES, N_CARDS, Zone
 from engine.core import ScopaEngine
+from engine.masks import is_consistent
 from search.determinize import determinize
 
 
@@ -30,7 +31,7 @@ def test_determinize_preserves_known_zones() -> None:
 def test_determinize_preserves_counts_and_consistency() -> None:
     eng = _dealt(7)
     world = determinize(eng, player=0, rng=np.random.default_rng(1))
-    assert world.is_consistent()
+    assert is_consistent(world)
     assert world.count(Zone.MAZZO) == eng.count(Zone.MAZZO)
     assert world.count(HAND_ZONES[1]) == eng.count(HAND_ZONES[1])
     assert world.state.sum() == N_CARDS

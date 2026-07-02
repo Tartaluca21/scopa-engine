@@ -55,18 +55,15 @@ class SearchConfig:
 
 def capture_options(engine: ScopaEngine, card: int) -> list[list[int]]:
     """Legal capture sets for `card` ([] = lay it down), one entry per move."""
-    options = engine.captures_for(card)
-    if options:
-        return [[int(c) for c in opt] for opt in options]
-    return [[]]
+    return engine.legal_captures(card)
 
 
 def legal_moves(engine: ScopaEngine, player: int) -> list[Move]:
     """Every (card, capture_set) the player may play from the current state."""
     moves: list[Move] = []
-    for card in engine.cards_in(HAND_ZONES[player]):
-        for cap in capture_options(engine, int(card)):
-            moves.append((int(card), cap))
+    for card in engine.cards_in(HAND_ZONES[player]).tolist():
+        for cap in engine.legal_captures(card):
+            moves.append((card, cap))
     return moves
 
 
@@ -132,7 +129,7 @@ def alphabeta(
     player = engine.current_player
     for card, cap in legal_moves(engine, player):
         child = engine.clone()
-        child.execute_move(card, cap)
+        child.apply_legal_move(card, cap)
         value = -alphabeta(child, depth - 1, -beta, -alpha, tt, cfg)
         if value > best:
             best = value

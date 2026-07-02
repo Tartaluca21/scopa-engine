@@ -11,6 +11,7 @@ import numpy as np
 from cognitive.belief import BeliefSystem
 from engine.cards import HAND_ZONES, N_CARDS, Suit, Zone, card_index
 from engine.core import ScopaEngine
+from engine.masks import is_consistent
 from search.determinize import _sample_opp_hand, determinize
 
 
@@ -132,7 +133,7 @@ def test_determinize_recovers_from_starved_belief() -> None:
     weights[int(hidden[0])] = 1.0  # a single believable card, but n_opp == 3
     for seed in range(15):
         world = determinize(eng, 0, np.random.default_rng(seed), weights)
-        assert world.is_consistent()
+        assert is_consistent(world)
         assert world.count(HAND_ZONES[1]) == n_opp
         assert world.state.sum() == N_CARDS
 
