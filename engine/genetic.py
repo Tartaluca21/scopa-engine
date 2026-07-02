@@ -6,11 +6,19 @@ mutation. Fitness comes from self-play matches (engine.heuristic.simulate_match)
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
 
-from engine.heuristic import HeuristicBot, Weights, simulate_match
+from engine.heuristic import HeuristicBot, Player, Weights, simulate_match
+
+AgentFactory = Callable[[Weights, np.random.Generator], Player]
+
+
+def _heuristic_factory(weights: Weights, rng: np.random.Generator) -> Player:
+    """Default factory: a one-ply HeuristicBot (ignores `rng`)."""
+    return HeuristicBot(weights)
 
 
 @dataclass(slots=True)
@@ -53,19 +61,27 @@ class BotPopulation:
         mask = rng.random(len(a.to_vector())) < 0.5
         child = np.where(mask, a.to_vector(), b.to_vector())
         child = child + rng.normal(0.0, self.config.mutation_sigma, size=child.shape)
-        return Weights.from_vector(child)
+        # clamp to non-negative, like Weights.random: negative weights invert
+        # the heuristic (e.g. a negative settebello weight) and confuse the agent.
+        return Weights.from_vector(np.clip(child, 0.0, None))
 
 
 def round_robin_fitness(
-    population: BotPopulation, rng: np.random.Generator
+    population: BotPopulation,
+    rng: np.random.Generator,
+    make_agent: AgentFactory = _heuristic_factory,
 ) -> list[float]:
-    """Score each genome by a self-play match against the next genome (ring)."""
+    """Score each genome by a self-play match against the next genome (ring).
+
+    `make_agent` turns a genome into a player, so the same loop trains either
+    one-ply heuristic bots (default) or PIMC `SearchAgent`s.
+    """
     genomes = population.genomes
     n = len(genomes)
     fitness = [0.0] * n
     for i in range(n):
-        a = HeuristicBot(genomes[i])
-        b = HeuristicBot(genomes[(i + 1) % n])
+        a = make_agent(genomes[i], rng)
+        b = make_agent(genomes[(i + 1) % n], rng)
         sa, sb = simulate_match(a, b, rng)
         fitness[i] += sa - sb
         fitness[(i + 1) % n] += sb - sa

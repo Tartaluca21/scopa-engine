@@ -34,9 +34,7 @@ def test_random_weights_are_non_negative() -> None:
 
 
 def test_capture_features_counts_and_primiera() -> None:
-    captured = np.array(
-        [card_index(Suit.DENARI, 7), card_index(Suit.COPPE, 6)], dtype=np.intp
-    )
+    captured = np.array([card_index(Suit.DENARI, 7), card_index(Suit.COPPE, 6)], dtype=np.intp)
     f = capture_features(captured)
     assert (f.captures, f.denari, f.settebello, f.primiera) == (2, 1, 1, 21 + 18)
 
@@ -83,6 +81,16 @@ def test_population_evolve_preserves_size_and_elite() -> None:
     pop.evolve(fitness, rng)
     assert len(pop) == 10
     assert best in pop.genomes
+
+
+def test_evolve_keeps_weights_non_negative() -> None:
+    rng = np.random.default_rng(4)
+    cfg = GeneticConfig(population_size=20, elite_frac=0.2, mutation_sigma=1.0)
+    pop = BotPopulation(cfg, rng)
+    for _ in range(5):
+        pop.evolve([float(i) for i in range(len(pop))], rng)
+    for genome in pop.genomes:
+        assert np.all(genome.to_vector() >= 0.0)
 
 
 def test_score_deal_ties_award_nothing() -> None:

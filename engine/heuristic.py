@@ -1,121 +1,57 @@
 """Heuristic bot, exposure-aware move selection, and self-play (Phase 3).
 
-Linear move-evaluation driven by a tunable weight vector, a one-ply selector
-that penalizes leaving capturable combinations (<=10) on the table, and a full
-self-play match used as the Genetic Algorithm's fitness function.
+A greedy one-ply selector that trades capture value against table exposure. The
+evaluation primitives it stands on -- the `Weights` genome, `capture_features`,
+the exposure estimate, and deal scoring -- live in `engine.features`; this module
+composes them into a playing agent and a self-play driver. The two exposure
+components fix the naive "give-away" behaviour of a flat subset count:
 
-    V(s) = w_captures*captures + w_denari*denari + w_sette*settebello
-         + w_primiera*primiera + w_scope*scope
+  * lost-card risk: a value-weighted estimate of the best single capture the
+    opponent could make next turn (so leaving the settebello or extra denari
+    on the table is penalized by *what* is exposed, not just how many subsets);
+  * anti-Scopa risk: a full-point penalty, scaled by the same w_scope used to
+    reward our own Scope, whenever our move hands the opponent a table they can
+    clear in a single play.
 """
 
 from __future__ import annotations
 
-from dataclasses import astuple, dataclass
+from dataclasses import dataclass
+from typing import Protocol
 
 import numpy as np
-import numpy.typing as npt
 
-from engine.cards import (
-    HAND_ZONES,
-    PRESE_ZONES,
-    Suit,
-    Zone,
-    card_suit,
-    card_value,
-)
+from engine.cards import HAND_ZONES, Zone
 from engine.core import ScopaEngine
+from engine.features import (
+    PRIMIERA_POINTS,
+    RISK_COEF,
+    SCOPA_RISK_COEF,
+    CaptureFeatures,
+    Weights,
+    _scopa_threat,
+    _weighted,
+    _worst_exposure,
+    capture_features,
+    evaluate,
+    score_deal,
+)
 
-PRIMIERA_POINTS: dict[int, int] = {
-    7: 21, 6: 18, 1: 16, 5: 15, 4: 14, 3: 13, 2: 12, 8: 10, 9: 10, 10: 10
-}
-N_WEIGHTS = 5
-RISK_COEF = 0.25  # penalty per opponent-capturable table combination
-
-
-@dataclass(slots=True)
-class Weights:
-    """Tunable parameters of the evaluation function (the GA genome)."""
-
-    captures: float = 1.0
-    denari: float = 1.0
-    settebello: float = 1.0
-    primiera: float = 1.0
-    scope: float = 1.0
-
-    def to_vector(self) -> npt.NDArray[np.float64]:
-        return np.array(astuple(self), dtype=np.float64)
-
-    @classmethod
-    def from_vector(cls, vec: npt.NDArray[np.float64]) -> Weights:
-        if vec.shape != (N_WEIGHTS,):
-            raise ValueError(f"expected {N_WEIGHTS} weights, got {vec.shape}")
-        return cls(*(float(x) for x in vec))
-
-    @classmethod
-    def random(cls, rng: np.random.Generator) -> Weights:
-        # clamp to non-negative: negative weights would invert the heuristic.
-        return cls.from_vector(np.clip(rng.uniform(-1.0, 1.0, N_WEIGHTS), 0.0, None))
-
-
-@dataclass(slots=True)
-class CaptureFeatures:
-    captures: int
-    denari: int
-    settebello: int
-    primiera: int
-
-
-def capture_features(captured: npt.NDArray[np.intp]) -> CaptureFeatures:
-    """Extract evaluation features from captured card indices."""
-    denari = 0
-    settebello = 0
-    best_per_suit = [0] * len(Suit)
-    for c in captured:
-        idx = int(c)
-        suit = card_suit(idx)
-        value = card_value(idx)
-        if suit == Suit.DENARI:
-            denari += 1
-            if value == 7:
-                settebello = 1
-        pts = PRIMIERA_POINTS[value]
-        if pts > best_per_suit[int(suit)]:
-            best_per_suit[int(suit)] = pts
-    return CaptureFeatures(int(captured.size), denari, settebello, sum(best_per_suit))
-
-
-def _weighted(f: CaptureFeatures, w: Weights) -> float:
-    return (
-        w.captures * f.captures
-        + w.denari * f.denari
-        + w.settebello * f.settebello
-        + w.primiera * f.primiera
-    )
-
-
-def evaluate(
-    engine: ScopaEngine, player: int, weights: Weights, scope_count: int = 0
-) -> float:
-    """Linear value of `player`'s captured pile under `weights`."""
-    f = capture_features(engine.cards_in(PRESE_ZONES[player]))
-    return _weighted(f, weights) + weights.scope * scope_count
-
-
-def _count_exposed(table: list[int]) -> int:
-    """Number of non-empty table subsets summing to <=10 (opponent-capturable)."""
-    count = 0
-
-    def rec(start: int, total: int, size: int) -> None:
-        nonlocal count
-        if size > 0:
-            count += 1
-        for i in range(start, len(table)):
-            v = card_value(table[i])
-            if total + v <= 10:
-                rec(i + 1, total + v, size + 1)
-
-    rec(0, 0, 0)
-    return count
+# Re-exported so existing call sites keep importing the evaluation layer from
+# `engine.heuristic`; the definitions now live in `engine.features`.
+__all__ = [
+    "PRIMIERA_POINTS",
+    "CaptureFeatures",
+    "HeuristicBot",
+    "Player",
+    "Weights",
+    "_scopa_threat",
+    "_weighted",
+    "capture_features",
+    "evaluate",
+    "score_deal",
+    "simulate_match",
+]
 
 
 @dataclass(slots=True)
@@ -140,6 +76,13 @@ class HeuristicBot:
                     best_score, best_card, best_cap = score, card, cap
         return best_card, best_cap
 
+    def _exposure(self, rest: list[int]) -> float:
+        """Penalty for the table handed to the opponent: lost cards + Scopa risk."""
+        penalty = RISK_COEF * _worst_exposure(rest, self.weights)
+        if _scopa_threat(rest):
+            penalty += SCOPA_RISK_COEF * self.weights.scope
+        return penalty
+
     def _candidate_scores(
         self, engine: ScopaEngine, card: int, table: list[int]
     ) -> list[tuple[list[int], float]]:
@@ -152,46 +95,42 @@ class HeuristicBot:
                 val = _weighted(capture_features(opt), self.weights)
                 if not rest:
                     val += self.weights.scope  # we clear the table: a scopa
-                out.append((taken, val - RISK_COEF * _count_exposed(rest)))
+                out.append((taken, val - self._exposure(rest)))
         else:
             rest = [*table, card]
-            out.append(([], -RISK_COEF * _count_exposed(rest)))
+            out.append(([], -self._exposure(rest)))
         return out
 
     def choose_move(self, engine: ScopaEngine, player: int) -> int:
         return self.select(engine, player)[0]
 
+    def move_scores(self, engine: ScopaEngine, player: int) -> list[tuple[int, list[int], float]]:
+        """Exposure-aware value of every legal move: (card, capture_set, score).
 
-def _award(points: list[float], a: int, b: int) -> None:
-    if a > b:
-        points[0] += 1.0
-    elif b > a:
-        points[1] += 1.0
-
-
-def score_deal(engine: ScopaEngine) -> tuple[float, float]:
-    """Score a finished deal: carte, denari, settebello, primiera, scope."""
-    f0 = capture_features(engine.cards_in(PRESE_ZONES[0]))
-    f1 = capture_features(engine.cards_in(PRESE_ZONES[1]))
-    points = [0.0, 0.0]
-    _award(points, f0.captures, f1.captures)
-    _award(points, f0.denari, f1.denari)
-    if f0.settebello:
-        points[0] += 1.0
-    elif f1.settebello:
-        points[1] += 1.0
-    _award(points, f0.primiera, f1.primiera)
-    points[0] += float(engine.scopa_counts[0])
-    points[1] += float(engine.scopa_counts[1])
-    return points[0], points[1]
+        The same quantity `select` maximizes, exposed per move so a search can
+        use it as a prior over `player`'s options without re-deriving it.
+        """
+        table = [int(c) for c in engine.cards_in(Zone.TAVOLO)]
+        out: list[tuple[int, list[int], float]] = []
+        for c in engine.cards_in(HAND_ZONES[player]):
+            card = int(c)
+            for cap, score in self._candidate_scores(engine, card, table):
+                out.append((card, cap, score))
+        return out
 
 
-def simulate_match(
-    bot_a: HeuristicBot, bot_b: HeuristicBot, rng: np.random.Generator
-) -> tuple[float, float]:
+class Player(Protocol):
+    """Anything that can pick a move: HeuristicBot, SearchAgent, RandomBot."""
+
+    def select(self, engine: ScopaEngine, player: int) -> tuple[int, list[int]]:
+        """Return (card, capture_indices) for `player` in the given state."""
+        ...
+
+
+def simulate_match(bot_a: Player, bot_b: Player, rng: np.random.Generator) -> tuple[float, float]:
     """Self-play one full deal between two bots; return (score_a, score_b)."""
     engine = ScopaEngine()
-    bots = (bot_a, bot_b)
+    bots: tuple[Player, Player] = (bot_a, bot_b)
     engine.deal_round(rng)
     while not engine.is_game_over():
         if engine.count(Zone.MANO_P1) == 0 and engine.count(Zone.MANO_P2) == 0:

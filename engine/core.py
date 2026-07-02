@@ -2,7 +2,10 @@
 
 State is a (N_ZONES, N_CARDS) uint8 matrix (0/1): 1 = card present in zone.
 The engine also tracks the side to move, the last capturer, and per-player
-scopa counts; all of these feed the incremental Zobrist hash.
+scopa counts. The incremental Zobrist hash covers the zones, the side to move,
+and the scopa counts -- but NOT `last_capturer`. Since the end-of-deal sweep
+depends on `last_capturer`, cache keys built on `zhash` must fold it in
+separately (see `search.alphabeta._tt_key`).
 """
 
 from __future__ import annotations
@@ -11,15 +14,22 @@ import numpy as np
 import numpy.typing as npt
 
 from engine.cards import (
+    CARD_VALUES,
     HAND_ZONES,
     N_CARDS,
     N_ZONES,
     PRESE_ZONES,
     Zone,
-    card_value,
     subsets_summing,
 )
-from engine.zobrist import SCOPA_KEYS, TURN_KEYS, ZOBRIST
+from engine.zobrist import (
+    SCOPA_KEY_INTS,
+    SCOPA_KEYS,
+    TURN_KEY_INTS,
+    TURN_KEYS,
+    ZOBRIST,
+    ZOBRIST_INTS,
+)
 
 CardArray = npt.NDArray[np.uint8]
 
@@ -55,15 +65,32 @@ class ScopaEngine:
         h ^= int(SCOPA_KEYS[1, int(self.scopa_counts[1])])
         return h
 
+    def rehash(self) -> None:
+        """Recompute and store the full Zobrist hash from the current state."""
+        self.zhash = self._recompute_hash()
+
+    def clone(self) -> ScopaEngine:
+        """Deep, independent copy: state matrix, scalars, scopa counts, hash."""
+        other = ScopaEngine.__new__(ScopaEngine)
+        other.state = self.state.copy()
+        other.zhash = self.zhash
+        other.current_player = self.current_player
+        other.last_capturer = self.last_capturer
+        other.scopa_counts = self.scopa_counts.copy()
+        return other
+
     # --- zone accessors --------------------------------------------------
 
     def cards_in(self, z: Zone) -> npt.NDArray[np.intp]:
         """Indices of cards present in zone `z`."""
-        return np.flatnonzero(self.state[z])
+        # `row.nonzero()[0]` == `np.flatnonzero(row)` for a 1-D row but skips the
+        # ravel/_wrapfunc Python layers flatnonzero adds — this is one of the
+        # hottest calls in the search, so the saved dispatch matters.
+        return self.state[z].nonzero()[0]
 
     def count(self, z: Zone) -> int:
         """Number of cards in zone `z`."""
-        return int(self.state[z].sum())
+        return int(np.count_nonzero(self.state[z]))
 
     # --- atomic transitions ---------------------------------------------
 
@@ -75,16 +102,16 @@ class ScopaEngine:
             raise ValueError(f"card {idx} absent from zone {src.name}")
         self.state[src, idx] = 0
         self.state[dst, idx] = 1
-        self.zhash ^= int(ZOBRIST[src, idx]) ^ int(ZOBRIST[dst, idx])
+        self.zhash ^= ZOBRIST_INTS[src][idx] ^ ZOBRIST_INTS[dst][idx]
 
     def _set_turn(self, player: int) -> None:
         if player != self.current_player:
-            self.zhash ^= int(TURN_KEYS[self.current_player]) ^ int(TURN_KEYS[player])
+            self.zhash ^= TURN_KEY_INTS[self.current_player] ^ TURN_KEY_INTS[player]
             self.current_player = player
 
     def _add_scopa(self, player: int) -> None:
         old = int(self.scopa_counts[player])
-        self.zhash ^= int(SCOPA_KEYS[player, old]) ^ int(SCOPA_KEYS[player, old + 1])
+        self.zhash ^= SCOPA_KEY_INTS[player][old] ^ SCOPA_KEY_INTS[player][old + 1]
         self.scopa_counts[player] = old + 1
 
     # --- rules: captures and action masking -----------------------------
@@ -96,19 +123,17 @@ class ScopaEngine:
         by combined sum is forbidden; only a single card may be taken.
         Empty list = no capture (card is laid on the table).
         """
-        v = card_value(idx)
-        table = self.cards_in(Zone.TAVOLO)
-        singles = [c for c in table if card_value(int(c)) == v]
+        v = CARD_VALUES[idx]
+        table = self.cards_in(Zone.TAVOLO).tolist()
+        singles = [c for c in table if CARD_VALUES[c] == v]
         if singles:
             return [np.array([c], dtype=np.intp) for c in singles]
-        return [
-            np.array(combo, dtype=np.intp)
-            for combo in subsets_summing([int(c) for c in table], v)
-        ]
+        return [np.array(combo, dtype=np.intp) for combo in subsets_summing(tuple(table), v)]
 
     def legal_action_mask(self, player: int) -> CardArray:
         """uint8 vector (40,): 1 for each card `player` may legally play (= hand)."""
-        return self.state[HAND_ZONES[player]].copy()
+        mask: CardArray = self.state[HAND_ZONES[player]].copy()
+        return mask
 
     def capture_mask(self, player: int) -> CardArray:
         """uint8 vector (40,): 1 for hand cards that trigger a capture."""
