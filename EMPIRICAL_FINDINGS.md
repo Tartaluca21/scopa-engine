@@ -4,11 +4,11 @@
 > while trying to make a Scopa-playing agent as strong as possible. Every
 > strength claim below comes from a paired, seat-swapped self-play experiment
 > with an explicit sample size, effect size, and uncertainty. The headline
-> result is negative and, we argue, informative: **on this game the classical
-> (non-learned) search paradigm reaches a practical ceiling at a very small
-> compute budget, and none of the usual levers — deeper search, tuned
+> result is negative and, we argue, informative: **within tested configurations,
+> the classical (non-learned) search paradigm reaches a practical plateau at a
+> very small compute budget, and none of the usual levers — deeper search, tuned
 > evaluation weights, sharper opponent belief, exact endgame solving, or a
-> learned leaf — buys measurable strength beyond it.**
+> learned leaf — bought measurable strength beyond it in these experiments.**
 
 ---
 
@@ -19,20 +19,23 @@ Carlo (PIMC) agent, then subjected the agent to a battery of controlled
 self-play experiments to locate the source of its playing strength. Contrary to
 the usual intuition that "more compute / better heuristics = stronger play," we
 find that a deliberately small configuration — PIMC with `n_worlds = 12` and
-alpha-beta depth `max_depth = 5` (~10 ms/move) — sits at a Pareto-optimal point.
-Scaling depth is *significantly harmful* (−0.80 ± 0.42 pts/deal at 40×12),
+alpha-beta depth `max_depth = 5` (~10 ms/move) — sits at a favorable point.
+Scaling depth *leaned worse in this run* (−0.80 ± 0.42 pts/deal at 40×12, not
+statistically reliable under our 95% CI rule but never an improvement),
 scaling breadth is neutral, an anytime Information-Set MCTS at 50–400× the
 compute only ties it, evolved evaluation weights are slightly *worse* than
-uniform ones, Bayesian opponent-belief modeling is a well-powered null and is
-strategically exploitable, an exact endgame solver corrects nothing the search
-does not already reach, and a learned value leaf that predicts deal outcomes far
-better than the heuristic nonetheless plays *significantly weaker*. We attribute
-this ceiling to three structural properties of Scopa — **PIMC strategy fusion**,
+uniform ones (significant), Bayesian opponent-belief modeling is a well-powered
+null and is strategically exploitable, an exact endgame solver corrects nothing
+the search does not already reach, and a learned value leaf that predicts deal
+outcomes far better than the heuristic nonetheless *did not justify deployment*.
+We attribute
+this plateau to three structural properties of Scopa — **PIMC strategy fusion**,
 **search dominance over the leaf evaluation**, and the **dominance of public
 information** over a tiny (≤3-card) hidden hand — and we support each with both
-data and mechanism. We treat these nulls as first-class results: they map the
-boundary of the classical paradigm and de-risk two expensive research programs
-(Deep CFR; deep RL self-play) that would have chased a gain we show to be ~0.
+data and mechanism. We treat these nulls as first-class results: within tested
+configurations they map a practical plateau for the classical paradigm and lower
+the priority of two expensive research programs (Deep CFR; deep RL self-play)
+that would have chased a gain these experiments measure as near ~0.
 
 ---
 
@@ -101,7 +104,7 @@ Measured cost: **~4.88 ms/move** (~10 ms including overhead).
 identity is arithmetic (`idx = suit*10 + value-1`); capture, scopa detection,
 dealing, the end-of-deal table sweep, and five-category scoring
 (carte / denari / settebello / primiera / scope) are exact and validated by the
-test suite (**232 passing tests**). State hashing is incremental Zobrist (XOR of
+test suite (**233 passing tests**). State hashing is incremental Zobrist (XOR of
 per-`(zone,card)` 64-bit keys, `O(1)` updates), feeding a bounded
 transposition table with `EXACT/LOWER/UPPER` bounds and FIFO eviction.
 
@@ -126,7 +129,7 @@ progressive-bias prior. It is not deployed (it only ties PIMC, §3.1).
 Each finding is stated as a hypothesis, the method, the result with statistics,
 and the mechanism we believe explains it.
 
-### 3.1 Search budget is saturated — and depth is actively harmful
+### 3.1 Search budget is saturated — and depth does not help (and leans worse)
 
 **Hypothesis.** More search (deeper alpha-beta, more determinized worlds, or an
 anytime MCTS given more time) yields stronger play.
@@ -136,12 +139,12 @@ baseline (paired, seat-swapped):
 
 | Challenger | Compute vs baseline | Effect (pts/deal) | Verdict |
 |---|---|---|---|
-| `40 × 12` (deeper) | ~11× | **−0.80 ± 0.42** (~−1.9σ) | **significantly worse** |
+| `40 × 12` (deeper) | ~11× | **−0.80 ± 0.42** (~−1.9σ) | null (leans worse; CI includes 0) |
 | `48 × 5` (broader) | 4× | −0.38 ± 0.42 | null (leans worse) |
 | ISMCTS @500 iters | ~50× time | +0.03 ± 0.46 | null (tie) |
 | ISMCTS @3000 iters | ~100–400× cpu | +0.05 ± 0.40 (N=60) | null, regressing to 0 |
 | `24 × 4` | 1.29× | +0.019 ± 0.116 (N=600) | null |
-| `12 × 4` (shallower) | 0.8× | **−0.139 ± 0.113** (N=600) | **significantly worse** |
+| `12 × 4` (shallower) | 0.8× | **−0.139 ± 0.113** (N=600) | null (leans worse; CI includes 0) |
 | `8 × 5` (fewer worlds) | 0.66× | −0.063 ± 0.095 (N=900) | null, leans worse |
 
 **Move-agreement proxy.** The `12 × 5` move already agrees **82%** of the time
@@ -149,25 +152,27 @@ with an `80 × 16` "oracle" search; a `50 × 12` search (23× the compute) raise
 agreement only to **~87%** and then plateaus. Extra compute rarely changes the
 decision, and when it does, real-play strength does not improve.
 
-**A sub-lever sweep confirms `12 × 5` is the sweet spot in *both* directions.**
-Going bigger is null-or-noise at higher cost (`16 × 5` −0.12, `24 × 5` +0.11,
-`12 × 6` +0.03 — all N=60 noise); going smaller now *measurably* hurts
-(`12 × 4`, `8 × 5` above). The ~⅓ CPU saving of a smaller config is not free.
+**A sub-lever sweep is consistent with `12 × 5` being a good operating point in
+*both* directions.** Going bigger is null-or-noise at higher cost (`16 × 5` −0.12,
+`24 × 5` +0.11, `12 × 6` +0.03 — all N=60 noise); going smaller leans worse
+(`12 × 4`, `8 × 5` above, both null under the 95% CI rule but never positive). The
+~⅓ CPU saving of a smaller config does not look free.
 
 **Mechanism — PIMC strategy fusion.** Alpha-beta solves each *determinized*
 world as though the exact deck order and opponent hand were known. Deeper search
 lets it exploit that per-world certainty more aggressively — but the certainty is
 fictional (the bot does not actually know those cards), so deeper play is
 brittle and over-confident. This is the textbook failure mode of
-perfect-information search applied to imperfect-information games, and it is why
-**depth makes PIMC weaker rather than stronger.**
+perfect-information search applied to imperfect-information games, and it is the
+most likely reason **depth does not make PIMC stronger (and leans weaker) in
+these experiments.**
 
 **Why ISMCTS (which has no strategy fusion) only ties.** ISMCTS reasons over
 information sets directly, so it is the "correct" imperfect-information method —
-yet at 50–400× the compute it merely ties PIMC. This bounds the
-imperfect-information headroom in Scopa at ~nil and is the empirical basis for
-de-risking Deep CFR (§5): the same lever ISMCTS pulls, pulled more expensively,
-cannot beat a ceiling that is already ~0.
+yet at 50–400× the compute it merely ties PIMC. In these experiments this bounds
+the measured imperfect-information headroom in Scopa at ~nil and is the empirical
+basis for lowering the priority of Deep CFR (§5): the same lever ISMCTS pulls,
+pulled more expensively, did not beat this plateau.
 
 **The late game is the only place sampling noise is visible — and it still does
 not pay.** A diagnostic shows that at `deck = 6` (the last hidden trick-set)
@@ -175,7 +180,7 @@ PIMC-12 disagrees with the *exact* all-worlds (1680-world) to-terminal
 expectation on **27.5%** of decisions (versus **0%** at `deck = 0`, which is
 already perfect information). We tried the obvious fix — a bespoke late-game
 boost to 96 worlds × depth-12 only at `deck = 6`. A scratch harness showed
-**+0.105 ± 0.094 (N=900), apparently significant** — but it **did not replicate
+**+0.105 ± 0.094 (N=900), apparently positive** — but it **did not replicate
 in the canonical `run_ab`: +0.007 ± 0.069 (N=1800), dead null** (boost confirmed
 active, changing 23% of late moves). Exact 1680-world enumeration behaved the
 same (+0.137 in scratch only). *Meta-lesson: trust the canonical harness, not
@@ -183,7 +188,7 @@ bespoke reimplementations.* Rejected.
 
 **Every remaining core-PIMC lever was also probed and reverted:**
 - **World aggregation** (the rule that combines per-world scores): mean is
-  optimal. `vote` −0.65, `min` −0.85 (both significantly negative), `meanmin`
+  optimal. `vote` −0.65, `min` −0.85 (both clearly negative), `meanmin`
   +0.07 (null). Robust/pessimistic aggregation just adds variance at 12 worlds.
 - **Phase-adaptive depth** (deepen only late, where fusion should be smallest):
   all null/negative (`late8@deck≤12` −0.26, `late8@deck≤6` −0.18, `late10@deck≤6`
@@ -201,9 +206,10 @@ bespoke reimplementations.* Rejected.
   search "knows better" are *selection bias*, not an exploitable leak — the
   bigger search loses in real play.
 
-**Conclusion.** PIMC `12 × 5` is Pareto-optimal for this game: near the
-algorithmic ceiling, ~50–100× faster than anything that ties it, and strictly
-better than deeper search. A 1000 ms time budget is a non-constraint here.
+**Conclusion.** Within tested configurations, PIMC `12 × 5` is a favorable
+operating point for this game: at a practical plateau, ~50–100× faster than
+anything that ties it, and never measurably beaten by deeper search. A 1000 ms
+time budget showed no measured improvement here.
 
 ### 3.2 Correctness audit — the search is sound (one real bug, found and fixed)
 
@@ -243,8 +249,8 @@ prioritization.
   equal (an early, underpowered read).
 - Better-powered N=450 over **3 independent seeds** (incl. distant `--seed 100`),
   seats swapped: **uniform beats the champion by +0.298 ± 0.141 pts/deal, 95% CI
-  [+0.157, +0.438], win-rate 54.3% — significant.** Per-seed: +0.243 ± 0.251,
-  +0.257 ± 0.250, +0.393 ± 0.231 (all positive).
+  [+0.022, +0.574] (excludes 0), win-rate 54.3% — significant.** Per-seed:
+  +0.243 ± 0.251, +0.257 ± 0.250, +0.393 ± 0.231 (all positive).
 
 **Mechanism (from 900-game component breakdown).** The champion does win the
 category it over-prizes — scope 0.61 vs 0.50 per deal — but it *bleeds* the
@@ -256,7 +262,8 @@ tuning is a near-flat lever, and here the flat lever tilts slightly *against* th
 hand-evolved shape. The GA's apparent "convergence" was mostly noise: fitness was
 a single, extremely high-variance ring match per genome.
 
-**Action.** The deployed bot uses uniform `Weights()`.
+**Action.** The genetic-weight loop is kept as reproducible research tooling, but
+the deployed bot uses uniform `Weights()`.
 
 ### 3.4 Endgame solver — exact, correct, and a strength null
 
@@ -274,9 +281,10 @@ searched to terminal inside the depth budget, so the heuristic almost never
 evaluates an endgame leaf — there is nothing for the solver to correct. The
 solvable region (deck-empty) equals the region the search already solves.
 
-**Confirmation via a controlled deficiency.** The solver *does* significantly help
+**Confirmation via a controlled deficiency.** The solver *does* appear to help
 a deliberately too-shallow search that cannot reach the endgame on its own:
-`d3 + solver` vs `d3` = **+0.193 ± 0.164 (significant)**. But that only brings the
+`d3 + solver` vs `d3` = **+0.193 ± 0.164 (positive but not statistically reliable
+under the 95% CI rule; the interval includes 0)**. But that only brings the
 shallow search up to *parity* with the deeper default: `d3 + solver` vs default,
 N=900 over 3 distant seeds = **+0.007 ± 0.098, dead null** (an earlier +0.089 at
 N=450 with adjacent seeds was noise). Kept correct, tested, gated off. Its real
@@ -308,15 +316,17 @@ predicts far better than the heuristic (0.49 vs 0.30) at the cost of ~one dot
 product, i.e. tractable inside alpha-beta.
 
 **But intrinsic accuracy ≠ strength.** We wired the fitted linear leaf behind a
-gate and A/B'd it, N=450 over 3 seeds: **−0.138 ± 0.137, CI [−0.275, −0.001] —
-significantly WEAKER** (win 47.8%). Component breakdown: the leaf over-values
+gate and A/B'd it, N=450 over 3 seeds: **−0.138 ± 0.137, 95% CI [−0.407, +0.131]
+— leans WEAKER but not statistically reliable under the 95% CI rule; it did not
+justify deployment** (win 47.8%). Component breakdown: the leaf over-values
 scope (0.67 vs 0.55) and loses cards (333 vs 492). CPU was only ~1.15×, so speed
 was not the issue — *strength* was. This is the sharpest demonstration of
 **search dominance**: a leaf that predicts the outcome ~65% better plays worse,
 because alpha-beta reaches terminal in the determinized worlds and washes the
 leaf out; where the leaf *does* bite, its scope bias distorts play. **The
-learned-value-leaf direction is closed** (neural = null, linear = negative). The
-encoder and data generator are kept as tested, reusable infrastructure.
+learned-value-leaf direction was not pursued further** (neural = null; linear
+leaned negative and did not justify deployment). The encoder and data generator
+are kept as tested, reusable infrastructure.
 
 ### 3.6 Bayesian opponent-belief modeling — a well-powered null, and exploitable
 
@@ -363,17 +373,20 @@ belief-free (verified by test).
 
 Three structural properties of Scopa explain nearly every null above.
 
-**(1) Strategy fusion (why depth hurts).** PIMC solves each determinized world as
-if its sampled cards were known. The optimum of "average over worlds of the
-per-world perfect-information best move" is *not* the true imperfect-information
-optimum; deeper per-world search sharpens a decision made on fictional certainty,
-so it increases confident mistakes. Empirically: −0.80 ± 0.42 at 40×12 (§3.1).
+**(1) Strategy fusion (why depth does not help).** PIMC solves each determinized
+world as if its sampled cards were known. The optimum of "average over worlds of
+the per-world perfect-information best move" is *not* the true
+imperfect-information optimum; deeper per-world search sharpens a decision made on
+fictional certainty, so it increases confident mistakes. Empirically: −0.80 ± 0.42
+at 40×12, which leans worse though it is not statistically reliable under the 95%
+CI rule (§3.1).
 
 **(2) Search dominance (why the leaf barely matters).** With 3-card hands the
 game tree is shallow; alpha-beta at depth 5 usually reaches *terminal* states and
 scores them exactly via `score_deal`. The leaf evaluation is consulted rarely and
 is largely washed out — which is why uniform weights beat an evolved genome
-(§3.3), and why a leaf that predicts outcomes 65% better plays *worse* (§3.5).
+(§3.3), and why a leaf that predicts outcomes 65% better did *not* play better
+(§3.5).
 
 **(3) Public-information dominance (why belief/opponent-modeling is null).** Most
 of the state is visible; the hidden component is a tiny hand that resets every
@@ -382,29 +395,32 @@ refinement to move outcomes — even oracle-accurate belief changing 9% of moves
 nets ~0 (§3.6). The same fact caps the total imperfect-information headroom, so
 ISMCTS (correct but expensive) only ties PIMC (fast but fused).
 
-Together these imply a **tactically shallow** game: ~10 ms of the right search is
-already near the algorithmic ceiling, and the standard strength levers are flat.
+Together these are consistent with a **tactically shallow** game: within tested
+configurations ~10 ms of the right search already sits at a practical plateau, and
+the standard strength levers looked flat in these experiments.
 
 ---
 
-## 5. What these nulls de-risk
+## 5. What these nulls lower the priority of
 
 The nulls are not dead ends; they redirect effort away from expensive programs
-whose payoff we can now bound.
+whose payoff these experiments bound as small.
 
 - **Deep CFR (Nash approximation via external-sampling MCCFR + advantage/strategy
   nets)** targets exactly the strategy fusion of §4(1). But our *existing* ISMCTS
   already pulls that lever without fusion and only *ties* PIMC at 100–400× cost
-  (§3.1). The imperfect-information ceiling is ~0, so a research-scale Deep CFR to
-  chase it is **not justified**.
+  (§3.1). The measured imperfect-information headroom is near ~0, so a
+  research-scale Deep CFR to chase it looks **hard to justify** on this evidence.
 - **Deep RL self-play value/policy nets** target the leaf (§4(2)). But the leaf is
-  demonstrably *not* the bottleneck: a much more accurate learned leaf plays
-  *weaker* (§3.5). The learned-leaf direction is **closed**.
-- **Bigger compute budgets** are a non-constraint: `12 × 5` is Pareto-optimal and
-  deeper search is harmful (§3.1).
+  demonstrably *not* the bottleneck: a much more accurate learned leaf did not play
+  better (§3.5). The learned-leaf direction was **not pursued further**.
+- **Bigger compute budgets** showed no measured improvement: within tested
+  configurations `12 × 5` is a favorable operating point and deeper search leaned
+  worse (§3.1).
 
-The highest-ROI remaining direction is therefore **not more strength** (the bot
-is near the ceiling and already beats a casual human roughly 2:1) but an
+The highest-ROI remaining direction is therefore **not more strength** (within
+tested configurations the bot is at a practical plateau and already beats a casual
+human roughly 2:1) but an
 **Explainable-AI / coaching layer** that reuses assets already built and tested:
 the exact endgame solver as a ground-truth oracle (§3.4), the per-move PIMC value
 spread as a "how close to best" signal, and the decision dataset's mistake flags
@@ -424,7 +440,7 @@ conclusions.
   in hand-written scratch harnesses but were ~0 in the canonical `run_ab`
   (§3.1). Only the one authoritative, seat-swapped, seeded harness is trusted.
 - **Proxies are not strength.** Oracle move-agreement and predictive R² are useful
-  gates, but a leaf with far higher R² played *significantly worse* (§3.5).
+  gates, but a leaf with far higher R² did not play better and leaned worse (§3.5).
   Intrinsic accuracy is necessary-at-best, never sufficient.
 - **Selection bias in "disagreement" analyses.** The 30% of decisions where a
   bigger search disagrees are near-ties, not exploitable leaks — acting on that
@@ -441,29 +457,30 @@ conclusions.
 
 | # | Lever | Best measured effect (pts/deal unless noted) | Verdict |
 |---|---|---|---|
-| 3.1 | Deeper search (40×12) | −0.80 ± 0.42 | **Significantly worse** (strategy fusion) |
+| 3.1 | Deeper search (40×12) | −0.80 ± 0.42 | Null, leans worse (CI includes 0; strategy fusion) |
 | 3.1 | Broader search (48×5) | −0.38 ± 0.42 | Null |
 | 3.1 | ISMCTS @100–400× cpu | +0.05 ± 0.40 | Null (tie) |
-| 3.1 | World aggregation ≠ mean | −0.65 (vote), −0.85 (min) | Significantly worse |
+| 3.1 | World aggregation ≠ mean | −0.65 (vote), −0.85 (min) | Clearly negative |
 | 3.1 | Late-game boost / phase-depth | +0.007 ± 0.069; all null | Null (reverted) |
 | 3.1 | Match-aware value | 50.0% ± 5.7% match win | Null |
 | 3.2 | TT `last_capturer` bug | 0.87% of moves flipped | **Real bug — fixed** |
 | 3.3 | Evolved weights vs uniform | uniform +0.298 ± 0.141 | Uniform **wins** (deployed) |
 | 3.4 | Exact endgame solver | −0.013 ± 0.240, +75% CPU | Null (gated off) |
-| 3.5 | Learned linear leaf | −0.138 ± 0.137 | **Significantly worse** (gated off) |
+| 3.5 | Learned linear leaf | −0.138 ± 0.137 | Null, leans worse (CI includes 0; gated off) |
 | 3.5 | Neural (MLP) leaf | R² 0.434 < linear 0.491 | Null (not built) |
 | 3.6 | Soft / exploitative belief | −0.033 ± 0.095; −0.054 ± 0.131 | Null + exploitable (gated off) |
 
-**Bottom line.** PIMC `12 × 5` with uniform weights is at the classical ceiling
-for Scopa. Deeper search, tuned weights, sharper belief, exact endgame solving,
-and a learned leaf were each measured and each returned null or negative. The one
-real defect found (a TT key bug) was fixed. Meaningful further *strength* would
-require breaking out of the classical paradigm at a cost we show to exceed its
-~0 payoff; the higher-value direction is an explanation/coaching layer built on
-the exact-oracle and per-move-value assets already in place.
+**Bottom line.** Within tested configurations, PIMC `12 × 5` with uniform weights
+sits at a practical plateau for Scopa. Deeper search, tuned weights, sharper
+belief, exact endgame solving, and a learned leaf were each measured and each
+returned null or negative in these experiments. The one real defect found (a TT
+key bug) was fixed. Meaningful further *strength* would likely require breaking
+out of the classical paradigm, at a cost these experiments suggest exceeds its
+small measured payoff; the higher-value direction is an explanation/coaching layer
+built on the exact-oracle and per-move-value assets already in place.
 
 ---
 
 *All figures above are reproducible via the seeded paired harness
 (`scripts/ab_eval.py`) and the tested modules under `engine/`, `search/`,
-`cognitive/`, and `learning/`. Test suite: 232 passing.*
+`cognitive/`, and `learning/`. Test suite: 233 passing.*

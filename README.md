@@ -3,11 +3,12 @@
 > A vectorized Scopa game engine and a family of AI agents that play the
 > 40-card Italian classic under **hidden information** — combining Zobrist
 > hashing, transposition tables, Perfect-Information Monte Carlo, alpha-beta
-> search, and a parallel genetic algorithm that *teaches itself* expert strategy.
+> search, and a parallel genetic algorithm for reproducible genetic-weight
+> experiments.
 
 <p align="left">
   <img alt="Python" src="https://img.shields.io/badge/python-3.12-blue">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-232%20passing-brightgreen">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-233%20passing-brightgreen">
   <img alt="Typing" src="https://img.shields.io/badge/typing-strict-success">
   <img alt="Style" src="https://img.shields.io/badge/style-ruff-black">
 </p>
@@ -24,12 +25,13 @@ what it cannot see*. The codebase delivers that in two halves:
 - **The Engine** — a fast, fully-typed, vectorized representation of the rules:
   the deck, the table, both hands, both capture piles, captures, scope, and
   end-of-deal scoring — every state transition validated by a deep test suite.
-- **The Brain** — a layered decision stack (PIMC → determinization →
+- **Decision stack** — a layered pipeline (PIMC → determinization →
   alpha-beta → tuned heuristic) wrapped behind a single `Player` interface, with
-  weights evolved by a multiprocessing genetic tournament.
+  weights evolved by a multiprocessing genetic tournament (research tooling; the
+  deployed bot uses uniform weights).
 
 The whole thing is built under a strict engineering budget: **≤ 250 lines per
-file, full static typing, English-only source, and 232 passing tests.**
+file, full static typing, English-only source, and 233 passing tests.**
 
 > 📄 For the full, rigorous account of every experiment — hypotheses, methods,
 > effect sizes with confidence intervals, and the mechanistic theory behind each
@@ -55,7 +57,7 @@ the two hands, and the two capture piles. Because the state is one NumPy matrix,
 operations like "all cards on the table" or "redistribute the deck" are
 vectorized slices rather than Python loops.
 
-On top of this we implemented the **official Scopa mechanics**:
+On top of this we implemented the **standard Scopa mechanics**:
 
 - **Capture logic** — a played card takes a matching single, or *any subset of
   table cards summing to its value* (combinatorial capture via
@@ -69,7 +71,7 @@ On top of this we implemented the **official Scopa mechanics**:
 The engine tracks the side to move, the last capturer, and per-player scopa
 counts — everything needed to drive search and scoring.
 
-### 2. The AI's Memory — *Zobrist Hashing + Transposition Tables*
+### 2. Search Memory — *Zobrist Hashing + Transposition Tables*
 
 Search re-visits the same board state through different move orders constantly.
 To recognize those collisions **instantly**, we integrated **Zobrist Hashing**:
@@ -85,7 +87,7 @@ reuse not just exact values but *bounds*, and the table evicts FIFO when full to
 keep memory flat during deep rollouts. The net effect: previously-seen states
 return their value immediately instead of being re-explored.
 
-### 3. The Decision Brain — *PIMC + Alpha-Beta*
+### 3. The Decision Stack — *PIMC + Alpha-Beta*
 
 The hard part of Scopa is **hidden information**: the opponent's hand and the
 deck order are unknown. The bot tackles this with **Perfect-Information Monte
@@ -116,9 +118,9 @@ same `bot_name`. An anytime
 **Information-Set MCTS** (`search/ismcts.py`, with an exposure-aware heuristic
 rollout and a progressive-bias prior) exists as a tested alternative engine.
 These configurations are deliberately small — the *Empirical Findings* below show
-that on this tactically-shallow game they already play near the algorithmic
-ceiling, and that spending more compute does not help (and deeper search can even
-hurt).
+that, within tested configurations, this tactically-shallow game reaches a
+practical plateau where spending more compute shows no measured improvement (and
+deeper search can lean worse).
 
 ### 4. Parallel Evolution — *a Genetic Algorithm tournament*
 
@@ -187,28 +189,33 @@ is reproducible — it just isn't where the strength comes from.
 
 ---
 
-## 🔬 Empirical Findings — Reaching the Classical-Paradigm Ceiling
+## 🔬 Empirical Findings — A Practical Plateau for Classical Methods
 
 Once the engine and agents were in place, the bot was put through a battery of
 **rigorous, paired self-play experiments** — seats swapped to cancel deck luck,
 `N ≥ 150–200` deals for statistical power, and low-variance proxy metrics used to
-gate the expensive tests. The headline: with **classical (non-learned) methods,
-the deployed PIMC bot is at a practical ceiling.** Three levers were probed; all
-three returned null or negative.
+gate the expensive tests. The headline: within tested configurations, with
+**classical (non-learned) methods, the deployed PIMC bot reaches a practical
+plateau.** Three levers were probed; all three returned null or negative in these
+experiments.
 
-**1 · Search budget is saturated — and more depth *hurts*.**
+**1 · Search budget is saturated — and more depth does not help (and leans
+worse).**
 The deployed `12 × 5` config decides in `≈10 ms`. Scaling it up does not help:
 - Its move already agrees `~82%` with a `23×`-larger "oracle" search, rising only
   to `~87%` and plateauing — extra compute rarely changes the decision.
-- Deeper search is *worse*: `40 × 12` vs `12 × 5` = **−0.80 ± 0.42** pts/deal.
-  This is textbook **PIMC strategy fusion** — alpha-beta solves each *determinized*
-  world as if the exact deck and opponent hand were known, so more depth exploits
-  information the bot does not really have, yielding brittle, over-confident play.
+- Deeper search leaned worse in this run: `40 × 12` vs `12 × 5` = **−0.80 ± 0.42**
+  pts/deal (not statistically reliable under the stated 95% CI rule, but never an
+  improvement). The likely mechanism is **PIMC strategy fusion** — alpha-beta
+  solves each *determinized* world as if the exact deck and opponent hand were
+  known, so more depth exploits information the bot does not really have, yielding
+  brittle, over-confident play.
 - More *breadth* (`48 × 5`) didn't help either (`−0.38 ± 0.42`), and an anytime
   **ISMCTS** at a `50×`-larger time budget only **tied** PIMC@10 ms (`+0.03 ± 0.46`).
 
-Scopa is tactically shallow (3-card hands), so `~10 ms` already plays near the
-ceiling. A larger `1000 ms` budget buys no strength — it is a non-constraint.
+Scopa is tactically shallow (3-card hands), so within tested configurations
+`~10 ms` already sits at a practical plateau. A larger `1000 ms` budget showed no
+measured improvement in these experiments — it is effectively a non-constraint.
 
 **2 · Leaf weights are a near-flat lever — and the evolved genome was slightly
 *worse* than uniform.** Because PIMC's alpha-beta usually scores terminal states
@@ -216,8 +223,8 @@ exactly, the leaf heuristic is largely washed out. An early N = 200 run rated th
 evolved champion as statistically equal to uniform weights (`+0.025 ± 0.218`), but
 a later, better-powered paired A/B (`scripts/ab_eval.py`, N = 450 over 3 seeds,
 seats swapped) found **uniform weights beat that genome by `+0.298 ± 0.141`
-pts/deal** (95% CI `[+0.157, +0.438]`, win-rate 54.3%). The genome over-prized
-scope — it wins the scope battle (`0.61` vs `0.50`/deal) but bleeds cards
+pts/deal** (95% CI `[+0.022, +0.574]` excludes 0, win-rate 54.3%). The genome
+over-prized scope — it wins the scope battle (`0.61` vs `0.50`/deal) but bleeds cards
 (`494` vs `322` of 900 games) and primiera (`500` vs `357`), a net loss. **The
 deployed bot now uses uniform `Weights()`.** *Caution recorded for future work:*
 an N = 60 run once showed a `+0.77 / 2.4σ` effect that **failed to replicate** at
@@ -248,16 +255,18 @@ search *already* reaches and solves those endgames, there is nothing to correct.
 **5 · Learned value leaf: better prediction, weaker play.** A linear leaf on a
 254-dim encoder predicts the deal outcome far better than the heuristic
 (test `R² 0.49` vs `0.30`; a neural MLP was *worse*, `0.43`) — yet in real play
-it was **−0.138 ± 0.137, significantly weaker**. Intrinsic accuracy ≠ strength:
+it **leaned weaker (−0.138 ± 0.137)**, and the effect did not justify deployment
+(the 95% CI does not exclude 0). Intrinsic accuracy ≠ strength:
 alpha-beta washes the leaf out (search dominance).
 
 **Bottom line.** Deeper search, tuned weights, sharper belief, exact endgame
-solving, and a learned leaf were each measured and each returned null or
-negative — the classical paradigm is at its ceiling. See
-**[`EMPIRICAL_FINDINGS.md`](EMPIRICAL_FINDINGS.md)** for the full analysis and
-why the two obvious "next regimes" (Deep CFR, deep-RL self-play) are de-risked to
-~0 payoff. The high-ROI direction is now an explanation/coaching layer, not more
-strength — see **[`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md)**.
+solving, and a learned leaf were each measured and each returned null or negative
+in these experiments — within tested configurations, the classical paradigm is at
+a practical plateau. See **[`EMPIRICAL_FINDINGS.md`](EMPIRICAL_FINDINGS.md)** for
+the full analysis and why the two obvious "next regimes" (Deep CFR, deep-RL
+self-play) showed little expected payoff over this plateau in these experiments.
+The high-ROI direction is now an explanation/coaching layer, not more strength —
+see **[`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md)**.
 
 ---
 
@@ -272,7 +281,7 @@ Engineering discipline is a first-class feature here, not an afterthought:
   `Any`. NumPy arrays carry typed dtypes (`npt.NDArray[...]`).
 - **English-only source** — all code, comments, docstrings, and tests are in
   English (the Italian card names live only in the human-facing CLI strings).
-- **A bulletproof test suite — 232 passing unit & integration tests** covering
+- **A broad test suite — 233 passing unit & integration tests** covering
   card math, engine transitions, Zobrist incrementality, alpha-beta correctness,
   determinization legality, PIMC and ISMCTS decisions, the belief system, the
   heuristic, and the training loop.
