@@ -66,6 +66,9 @@ def determinize(
     n_opp = clone.count(opp_hand)
     pool = np.concatenate([clone.cards_in(Zone.MAZZO), clone.cards_in(opp_hand)])
     new_opp = _sample_opp_hand(pool, n_opp, rng, weights)
+    # Only the opponent's *current* hand is sampled; the leftover talon is stored
+    # back as an unordered zone row, so future deal order is not a sampled degree
+    # of freedom here (see EMPIRICAL_FINDINGS.md 3.2, known modeling limitation).
     new_deck = np.setdiff1d(pool, new_opp)
     clone.state[Zone.MAZZO, :] = 0
     clone.state[opp_hand, :] = 0

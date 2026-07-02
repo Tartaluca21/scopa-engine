@@ -118,6 +118,11 @@ def alphabeta(
     empty_hands = engine.count(Zone.MANO_P1) == 0 and engine.count(Zone.MANO_P2) == 0
     if empty_hands and engine.count(Zone.MAZZO) > 0:
         dealt = engine.clone()
+        # Re-deal with NO rng: the next cards are dealt in ascending card-index
+        # order, a deterministic function of the (hashed) talon set. This keeps
+        # the world-shared, zhash-keyed TT sound and the search deterministic --
+        # but it also means PIMC never samples future deal *order*, only hidden
+        # membership. See EMPIRICAL_FINDINGS.md 3.2 (known modeling limitation).
         dealt.deal_round()
         return alphabeta(dealt, depth, alpha, beta, tt, cfg)
 

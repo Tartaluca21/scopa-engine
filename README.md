@@ -8,7 +8,7 @@
 
 <p align="left">
   <img alt="Python" src="https://img.shields.io/badge/python-3.12-blue">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-233%20passing-brightgreen">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-234%20passing-brightgreen">
   <img alt="Typing" src="https://img.shields.io/badge/typing-strict-success">
   <img alt="Style" src="https://img.shields.io/badge/style-ruff-black">
 </p>
@@ -31,7 +31,7 @@ what it cannot see*. The codebase delivers that in two halves:
   deployed bot uses uniform weights).
 
 The whole thing is built under a strict engineering budget: **≤ 250 lines per
-file, full static typing, English-only source, and 233 passing tests.**
+file, full static typing, English-only source, and 234 passing tests.**
 
 > 📄 For the full, rigorous account of every experiment — hypotheses, methods,
 > effect sizes with confidence intervals, and the mechanistic theory behind each
@@ -281,7 +281,7 @@ Engineering discipline is a first-class feature here, not an afterthought:
   `Any`. NumPy arrays carry typed dtypes (`npt.NDArray[...]`).
 - **English-only source** — all code, comments, docstrings, and tests are in
   English (the Italian card names live only in the human-facing CLI strings).
-- **A broad test suite — 233 passing unit & integration tests** covering
+- **A broad test suite — 234 passing unit & integration tests** covering
   card math, engine transitions, Zobrist incrementality, alpha-beta correctness,
   determinization legality, PIMC and ISMCTS decisions, the belief system, the
   heuristic, and the training loop.

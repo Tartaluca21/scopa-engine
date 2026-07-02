@@ -40,6 +40,36 @@ def test_deal_round_replenish_no_table() -> None:
     assert eng.count(Zone.MANO_P2) == 3
 
 
+def test_deal_round_without_rng_is_sorted_order() -> None:
+    """Pin the search re-deal contract: no rng -> deal in ascending card-index
+    order, the player dealt first (MANO_P1) getting the lowest indices.
+
+    This is the mechanism behind the modeling limitation documented in
+    EMPIRICAL_FINDINGS.md 3.2: alpha-beta's empty-hands re-deal calls
+    ``deal_round()`` with no rng, so PIMC samples hidden-card *membership* but
+    never future deal *order*. Guards against a silent change (e.g. an added
+    shuffle) that would break the world-shared TT's soundness assumptions.
+    """
+    eng = ScopaEngine()
+    _drain_deck(eng)  # empty the talon so no table cards are dealt
+    # A deliberately non-contiguous, out-of-order talon of exactly six cards.
+    talon = [
+        card_index(Suit.BASTONI, 9),
+        card_index(Suit.DENARI, 1),
+        card_index(Suit.COPPE, 5),
+        card_index(Suit.SPADE, 2),
+        card_index(Suit.DENARI, 7),
+        card_index(Suit.COPPE, 3),
+    ]
+    for c in talon:
+        eng.move(c, Zone.PRESE_P2, Zone.MAZZO)
+    eng.deal_round()  # no rng
+    ordered = sorted(talon)
+    assert [int(x) for x in eng.cards_in(Zone.MANO_P1)] == ordered[:3]
+    assert [int(x) for x in eng.cards_in(Zone.MANO_P2)] == ordered[3:]
+    assert eng.count(Zone.MAZZO) == 0
+
+
 def test_execute_move_capture_to_prese_and_toggle() -> None:
     eng = ScopaEngine()
     eng.move(card_index(Suit.DENARI, 7), Zone.MAZZO, Zone.TAVOLO)

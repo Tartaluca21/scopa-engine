@@ -104,7 +104,7 @@ Measured cost: **~4.88 ms/move** (~10 ms including overhead).
 identity is arithmetic (`idx = suit*10 + value-1`); capture, scopa detection,
 dealing, the end-of-deal table sweep, and five-category scoring
 (carte / denari / settebello / primiera / scope) are exact and validated by the
-test suite (**233 passing tests**). State hashing is incremental Zobrist (XOR of
+test suite (**234 passing tests**). State hashing is incremental Zobrist (XOR of
 per-`(zone,card)` 64-bit keys, `O(1)` updates), feeding a bounded
 transposition table with `EXACT/LOWER/UPPER` bounds and FIFO eviction.
 
@@ -231,6 +231,32 @@ the TT key with `last_capturer` (re-keying gives 0 mismatches; the engine hash i
 untouched). Strength impact is negligible (consistent with the endgame null,
 §3.4), but the search is now sound. Only alpha-beta and the endgame cache key on
 `zhash`; ISMCTS does not.
+
+**Known modeling limitation — determinization samples hidden-card *membership*,
+not future deal *order*.** Each determinized world resamples *which* hidden cards
+sit in the opponent's current hand versus the talon (a random draw per world),
+but the talon is a single unordered zone row of the state matrix, so the *order*
+of future deals is not a sampled degree of freedom. The only consumer of that
+order is alpha-beta's empty-hands re-deal (`search/alphabeta.py`), which calls
+`deal_round()` with no RNG and therefore deals the next six cards in ascending
+card-index order — identically in every world. The search thus integrates over
+hidden *membership* but not over future deal *order*: within a world the future is
+one fixed, non-uniform ordering (systematically routing the lowest-index talon
+cards to the player dealt first) rather than a uniform sample the world-average
+could integrate out. This is a *modeling* limitation, not a soundness bug — the
+re-deal is a deterministic function of the (hashed) talon set, which is exactly
+what keeps the world-shared, `zhash`-keyed TT sound and the search deterministic.
+A robust fix (per-world sampled deal order) is deferred because it is
+architecturally invasive and cuts against that guarantee: order is not in the
+Zobrist hash, so randomizing it per re-deal would collide non-equal futures on a
+single TT key (unsound) and break search determinism, while a correct version
+needs either per-world transposition tables (dropping the documented cross-world
+sharing) or deck order folded into the state *and* hash (touching
+reset/clone/hash/`deal_round`/`determinize` and every set-assuming caller). Given
+the endgame-solver null (§3.4) and the strategy-fusion evidence that *more* deck
+lookahead does not help (§3.1), the expected strength payoff is small, so the
+limitation is recorded rather than rushed. Current re-deal behavior is pinned by
+`tests/test_lifecycle.py::test_deal_round_without_rng_is_sorted_order`.
 
 ### 3.3 Evaluation weights — evolved is *worse* than uniform
 
@@ -483,4 +509,4 @@ built on the exact-oracle and per-move-value assets already in place.
 
 *All figures above are reproducible via the seeded paired harness
 (`scripts/ab_eval.py`) and the tested modules under `engine/`, `search/`,
-`cognitive/`, and `learning/`. Test suite: 233 passing.*
+`cognitive/`, and `learning/`. Test suite: 234 passing.*
