@@ -109,7 +109,7 @@ def test_dataset_stats_full() -> None:
     assert s["capture_pct"] == 2 / 3 and s["lay_pct"] == 1 / 3
     assert s["avg_table_size"] == 2.0 and s["avg_hand_size"] == 3.0
     assert s["result_breakdown"] == {"win": 3}
-    assert s["by_bot"]["PIMC(n_worlds=15,max_depth=6)"]["decisions"] == 3
+    assert s["by_bot"]["PIMC(n_worlds=15,max_depth=6)"]["decisions"] == 3  # type: ignore[index]
 
 
 def test_report_includes_new_fields() -> None:

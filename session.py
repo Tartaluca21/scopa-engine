@@ -45,14 +45,9 @@ def pimc_bot_name(n_worlds: int, max_depth: int) -> str:
     return f"PIMC(n_worlds={n_worlds},max_depth={max_depth})"
 
 
-def new_deal_id() -> int:
-    """A fresh deal identifier; the deal is reproducible from its seed entropy."""
-    return int(np.random.SeedSequence().entropy)
-
-
 def new_match_id() -> int:
     """A fresh, effectively unique match identifier."""
-    return int(np.random.SeedSequence().entropy)
+    return int(np.random.SeedSequence().entropy)  # type: ignore[arg-type]
 
 
 @dataclass(slots=True, frozen=True)

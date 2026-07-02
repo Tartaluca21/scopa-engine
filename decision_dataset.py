@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from pathlib import Path
+from typing import cast
 
 from engine.cards import card_value
 from gamelog import DealRecord, MatchRecord
@@ -33,7 +34,8 @@ def link_matches(matches: list[MatchRecord]) -> dict[int, int]:
 
 def _table_after(table: list[int], move: list[object]) -> list[int]:
     """Table state after playing `move = [card, [captures]]` on `table`."""
-    played, captured = int(move[0]), [int(c) for c in move[1]]  # type: ignore[arg-type]
+    played = int(cast("int", move[0]))
+    captured = [int(c) for c in cast("list[int]", move[1])]
     if captured:
         gone = set(captured)
         return [c for c in table if c not in gone]
@@ -56,9 +58,7 @@ def _is_scopable(cards: list[int]) -> bool:
     return 1 <= total <= 10 and total not in values
 
 
-def _scopa_flags(
-    table: object, legal_moves: object, chosen: object
-) -> tuple[bool, bool]:
+def _scopa_flags(table: object, legal_moves: object, chosen: object) -> tuple[bool, bool]:
     """`(left_table_scopable, avoidable_scopa)` from human-visible info only.
 
     `left_table_scopable`: the chosen move leaves a table the opponent could
@@ -179,8 +179,7 @@ def report_text(rows: list[Row], n_deals: int) -> str:
         f"Capture vs lay             : {s['capture_pct']:.1%} capture / {s['lay_pct']:.1%} lay",
         f"Avg table size before move : {s['avg_table_size']:.2f}",
         f"Avg hand size before move  : {s['avg_hand_size']:.2f}",
-        f"Left table scopable        : {s['left_scopable_count']} "
-        f"({s['left_scopable_pct']:.1%})",
+        f"Left table scopable        : {s['left_scopable_count']} ({s['left_scopable_pct']:.1%})",
         f"Avoidable scopa left       : {s['avoidable_scopa_count']} "
         f"({s['avoidable_scopa_pct']:.1%})",
         "Final result of decisions  :",
@@ -200,7 +199,7 @@ def report_text(rows: list[Row], n_deals: int) -> str:
 def _render_move(move: object) -> str:
     """Render a `[card, [captures]]` move with human-readable card names."""
     if isinstance(move, list) and len(move) == 2:
-        return describe_move(int(move[0]), [int(c) for c in move[1]])  # type: ignore[arg-type]
+        return describe_move(int(move[0]), [int(c) for c in move[1]])
     return str(move)
 
 
@@ -211,9 +210,9 @@ def sample_text(rows: list[Row], k: int) -> str:
     shown = rows[:k]
     lines = [f"=== Sample of {len(shown)} decision(s) ==="]
     for i, r in enumerate(shown, start=1):
-        hand = r.get("hand") or []
-        table = r.get("table") or []
-        legal = r.get("legal_moves") or []
+        hand = cast("list[int]", r.get("hand") or [])
+        table = cast("list[int]", r.get("table") or [])
+        legal = cast("list[object]", r.get("legal_moves") or [])
         header = f"[{i}] deal {r.get('deal_id')} turn {r.get('turn')}"
         lines.append(f"{header}  ({r.get('final_result')})")
         lines.append("  hand  : " + (", ".join(card_name(int(c)) for c in hand) or "(empty)"))

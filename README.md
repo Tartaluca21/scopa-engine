@@ -257,7 +257,7 @@ negative — the classical paradigm is at its ceiling. See
 **[`EMPIRICAL_FINDINGS.md`](EMPIRICAL_FINDINGS.md)** for the full analysis and
 why the two obvious "next regimes" (Deep CFR, deep-RL self-play) are de-risked to
 ~0 payoff. The high-ROI direction is now an explanation/coaching layer, not more
-strength.
+strength — see **[`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md)**.
 
 ---
 
@@ -284,6 +284,7 @@ engine/
   zobrist.py        random 64-bit key tables, collision-checked at import
   transposition.py  bounded TT with EXACT/LOWER/UPPER bounds, FIFO eviction
   features.py       linear evaluation, capture features, exposure, deal scoring
+  masks.py          action-mask & one-card-per-zone consistency helpers
   heuristic.py      exposure-aware one-ply bot + self-play match driver
   genetic.py        population, elitism + crossover + mutation
 cognitive/
@@ -307,12 +308,37 @@ capture.py          per-decision snapshot for the move-history dataset
 decision_dataset.py flatten captured deals into a human-decision dataset
 train.py            evolve PIMC weights and print the best genome
 play.py             interactive human-vs-bot CLI
+scripts/
+  benchmark.py            default-bot benchmark + decision-parity digest
+  ab_eval.py              paired, seat-swapped A/B between two configurations
+  build_decision_dataset.py  build the human-decision dataset from move logs
 tests/              unit & integration tests
 ```
 
 ---
 
 ## ▶️ How to Run
+
+### 📦 Install
+
+Requires Python ≥ 3.12. With [uv](https://docs.astral.sh/uv/) (recommended — a
+lockfile is committed):
+
+```bash
+uv sync            # create the venv and install pinned dependencies
+uv run pytest      # run anything inside the environment with `uv run …`
+```
+
+Or with plain `pip`:
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -e .   # runtime deps; add '.[dev]' for pytest/ruff/mypy
+```
+
+The commands below assume the environment is active (prefix them with `uv run`
+if you use uv). Human-vs-bot games are logged as JSONL under `logs/` (gitignored,
+so your play history stays local); the stats tools below read them back.
 
 ```bash
 # 1. Run the full test suite
@@ -361,6 +387,14 @@ python scripts/build_decision_dataset.py --report   # report only, no write
 python scripts/build_decision_dataset.py --sample 5 # also pretty-print 5 rows
 ```
 
+### ⏱️ Benchmark the bot
+
+```bash
+python scripts/benchmark.py            # ms/move, deals/sec, wall + CPU time
+python scripts/benchmark.py --parity   # deterministic decision digest
+python scripts/benchmark.py --profile  # cProfile hot-path breakdown
+```
+
 Tooling:
 
 ```bash
@@ -377,3 +411,18 @@ reasons through hidden information with PIMC + alpha-beta, evolves heuristic
 weights through a parallel genetic tournament, and — crucially — **rigorously
 measures where its strength actually comes from**, all in a clean, modular,
 thoroughly-tested codebase.
+
+---
+
+## 📄 License
+
+Released under the [MIT License](LICENSE) — see the `LICENSE` file for the full
+text.
+
+Card art in `assets/cards/` is **Public Domain** (Wikimedia Commons, Naples
+deck), not covered by the MIT code license — see
+[`assets/cards/CREDITS.md`](assets/cards/CREDITS.md) for provenance.
+
+Everything runs locally: there is no backend, network, telemetry, or analytics.
+Human-vs-bot games are logged only to `logs/` on your own machine and are
+gitignored by default, so your play history is never committed or uploaded.

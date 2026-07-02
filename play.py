@@ -116,7 +116,7 @@ def run_deal(
 def _interactive_deal(cfg: PimcConfig, record_moves: bool = False) -> DealRecord:
     """Seed a fresh deal (reproducible from its deal_id) and play it out."""
     seed_seq = np.random.SeedSequence()
-    deal_id = int(seed_seq.entropy)
+    deal_id = int(seed_seq.entropy)  # type: ignore[arg-type]
     return run_deal(cfg, np.random.default_rng(seed_seq), deal_id, record_moves)
 
 
@@ -142,7 +142,7 @@ def run_match(target: float, deal_provider: Callable[[], DealRecord]) -> list[De
 
 def play_match(target: float, cfg: PimcConfig, record_moves: bool = False) -> MatchRecord:
     """Play a full match to `target`, logging each deal and the final match."""
-    match_id = int(np.random.SeedSequence().entropy)
+    match_id = int(np.random.SeedSequence().entropy)  # type: ignore[arg-type]
     print(f"=== Scopa match to {target:g}: you (player 1) vs the PIMC bot ===")
     records = run_match(target, lambda: _interactive_deal(cfg, record_moves))
     human = sum(r.human for r in records)

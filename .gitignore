@@ -7,7 +7,30 @@ wheels/
 *.egg-info
 
 # Virtual environments
-.venv
+.venv/
+venv/
 
-# Human-vs-bot deal logs
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# OS / editor cruft
+.DS_Store
+**/.DS_Store
+
+# Secrets / local environment
+.env
+.env.*
+
+# Human-vs-bot deal logs + everything generated from them
+# (deal/match JSONL, the human-decision dataset, and the generated reports)
 logs/
+
+# Profiler / benchmark output files
+*.prof
+*.pstats
+*.lprof
+
+# Screenshots / scratch captures
+screenshots/

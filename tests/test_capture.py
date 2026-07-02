@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import numpy as np
 
 from capture import cards_seen, decision_record, legal_moves
@@ -36,7 +38,8 @@ def test_cards_seen_excludes_opponent_hand() -> None:
 def test_decision_record_snapshot_is_pre_move() -> None:
     engine = _fresh_engine()
     hash_before = engine.zhash
-    card, cap = legal_moves(engine, 0)[0][0], legal_moves(engine, 0)[0][1]
+    move = legal_moves(engine, 0)[0]
+    card, cap = cast("int", move[0]), cast("list[int]", move[1])
     rec = decision_record(engine, "human", 0, 3, card, cap)
     assert engine.zhash == hash_before  # capture never mutates the engine
     assert rec["player"] == "human"

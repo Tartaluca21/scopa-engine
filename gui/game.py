@@ -80,7 +80,7 @@ class GameController:
     def new_deal(self) -> None:
         """Deal a fresh round (reproducible from `deal_id`) and a new bot worker."""
         seed = np.random.SeedSequence()
-        self.deal_id = int(seed.entropy)
+        self.deal_id = int(seed.entropy)  # type: ignore[arg-type]
         self.engine = ScopaEngine()
         self.engine.deal_round(np.random.default_rng(seed))
         self.bot = self._bot_factory(self.rng)
