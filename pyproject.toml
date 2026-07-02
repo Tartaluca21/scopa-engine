@@ -8,6 +8,17 @@ dependencies = [
     "pygame>=2.6.1",
 ]
 
+# Dev tools live in two places on purpose:
+#   * [dependency-groups] is what `uv sync` installs automatically (PEP 735).
+#   * [project.optional-dependencies] is what `pip install -e '.[dev]'` reads.
+# Keep the two lists in sync.
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",
@@ -15,12 +26,42 @@ dev = [
     "mypy>=1.11",
 ]
 
+[project.scripts]
+scopa-play = "play:main"
+scopa-gui = "gui_run:main"
+scopa-train = "train:main"
+scopa-stats = "stats:main"
+scopa-match-stats = "match_stats:main"
+scopa-benchmark = "scripts.benchmark:main"
+scopa-ab-eval = "scripts.ab_eval:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["engine", "cognitive", "search", "gui", "learning"]
+# Subpackages plus the top-level single-file modules the console scripts import
+# at runtime. `include` is additive (unlike `packages`, which is exclusive and
+# would drop the loose modules).
+include = [
+    "engine",
+    "cognitive",
+    "search",
+    "gui",
+    "learning",
+    "scripts",
+    "botconfig.py",
+    "capture.py",
+    "decision_dataset.py",
+    "gamelog.py",
+    "gui_run.py",
+    "match_stats.py",
+    "play.py",
+    "session.py",
+    "stats.py",
+    "train.py",
+    "ui.py",
+]
 
 [tool.ruff]
 target-version = "py312"

@@ -8,6 +8,8 @@ best evolved genome. Run with:
 
 from __future__ import annotations
 
+import argparse
+
 import numpy as np
 
 from engine.genetic import BotPopulation, GeneticConfig
@@ -49,5 +51,17 @@ def train(
     return best
 
 
+def main() -> None:
+    """Console entry point: run evolution and print the best genome."""
+    parser = argparse.ArgumentParser(
+        description="Evolve PIMC weights with a genetic loop and print the best genome."
+    )
+    parser.add_argument(
+        "-g", "--generations", type=int, default=GENERATIONS, help="generations to run"
+    )
+    args = parser.parse_args()
+    train(generations=args.generations, verbose=True)
+
+
 if __name__ == "__main__":
-    train()
+    main()

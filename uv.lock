@@ -336,6 +336,13 @@ dependencies = [
     { name = "pygame" },
 ]
 
+[package.optional-dependencies]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
@@ -345,9 +352,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11" },
     { name = "numpy", specifier = ">=2.0" },
     { name = "pygame", specifier = ">=2.6.1" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
 ]
+provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
 dev = [

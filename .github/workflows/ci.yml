@@ -17,3 +17,19 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest -q
+      - run: uv run mypy .
+
+  pip-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e ".[dev]"
+      - name: console scripts are installed and smoke-safe
+        run: |
+          scopa-play --help
+          scopa-gui --help
+          scopa-train --help
+          scopa-benchmark --help

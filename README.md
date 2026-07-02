@@ -342,8 +342,22 @@ Or with plain `pip`:
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -e .   # runtime deps; add '.[dev]' for pytest/ruff/mypy
+pip install -e .            # runtime deps only
+pip install -e '.[dev]'     # + pytest / ruff / mypy for development
 ```
+
+Installing also puts a set of console scripts on your `PATH`, so you can run the
+tools by name instead of `python <file>.py`:
+
+| Command             | Equivalent                     |
+| ------------------- | ------------------------------ |
+| `scopa-play`        | `python play.py`               |
+| `scopa-gui`         | `python gui_run.py`            |
+| `scopa-train`       | `python train.py`              |
+| `scopa-stats`       | `python stats.py`              |
+| `scopa-match-stats` | `python match_stats.py`        |
+| `scopa-benchmark`   | `python scripts/benchmark.py`  |
+| `scopa-ab-eval`     | `python scripts/ab_eval.py`    |
 
 The commands below assume the environment is active (prefix them with `uv run`
 if you use uv). Human-vs-bot games are logged as JSONL under `logs/` (gitignored,
@@ -354,18 +368,21 @@ so your play history stays local); the stats tools below read them back.
 pytest
 
 # 2. Train the AI — run the genetic tournament and print the best genome
-python train.py
+scopa-train                    # (dev alt: python train.py)
 
 # 3. Play against the PIMC bot in your terminal
-python play.py                 # a single deal
-python play.py --match-to 11   # a match: deals until someone reaches 11 (or 21)
-python play.py --record-moves  # also capture each decision into the deal log
+scopa-play                     # a single deal
+scopa-play --match-to 11       # a match: deals until someone reaches 11 (or 21)
+scopa-play --record-moves      # also capture each decision into the deal log
 ```
+
+Every `scopa-*` command accepts `--help`. The `python <file>.py` forms shown as
+"dev alt" still work when running from a source checkout.
 
 ### 🖥️ Play in the GUI
 
 ```bash
-python gui_run.py
+scopa-gui                      # (dev alt: python gui_run.py)
 ```
 
 The window opens on a **setup screen**. Click to choose what to play, then
@@ -385,10 +402,10 @@ JSONL logs, so everything below works identically for both.
 
 ```bash
 # Your deal record vs the bot (single deals + match deals)
-python stats.py
+scopa-stats                    # (dev alt: python stats.py)
 
 # Your match record vs the bot, broken down by bot configuration
-python match_stats.py
+scopa-match-stats              # (dev alt: python match_stats.py)
 
 # Build a human-decision dataset from games played with move recording on
 python scripts/build_decision_dataset.py            # write dataset + report
@@ -399,9 +416,10 @@ python scripts/build_decision_dataset.py --sample 5 # also pretty-print 5 rows
 ### ⏱️ Benchmark the bot
 
 ```bash
-python scripts/benchmark.py            # ms/move, deals/sec, wall + CPU time
-python scripts/benchmark.py --parity   # deterministic decision digest
-python scripts/benchmark.py --profile  # cProfile hot-path breakdown
+scopa-benchmark            # ms/move, deals/sec, wall + CPU time
+scopa-benchmark --parity   # deterministic decision digest
+scopa-benchmark --profile  # cProfile hot-path breakdown
+# (dev alt: python scripts/benchmark.py ...)
 ```
 
 Tooling:
